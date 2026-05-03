@@ -855,13 +855,18 @@ def init_app():
     if not os.path.exists(STORAGE_PATH):
         os.makedirs(STORAGE_PATH, exist_ok=True)
     
-    # Copy accounts.txt from source to /tmp if it exists in source
-    source_accounts = os.path.join(os.path.dirname(__file__), "accounts.txt")
-    if os.path.exists(source_accounts):
+    # Copy accounts.txt from source to storage if needed
+    source_accounts = os.path.abspath(os.path.join(os.path.dirname(__file__), "accounts.txt"))
+    target_accounts = os.path.abspath(ACCOUNTS_FILE)
+    
+    if os.path.exists(source_accounts) and source_accounts != target_accounts:
         import shutil
-        shutil.copy2(source_accounts, ACCOUNTS_FILE)
-        app.logger.info(f"Copied accounts.txt to {ACCOUNTS_FILE}")
-    elif not os.path.exists(ACCOUNTS_FILE):
+        try:
+            shutil.copy2(source_accounts, target_accounts)
+            app.logger.info(f"Copied accounts.txt to {target_accounts}")
+        except Exception as e:
+            app.logger.error(f"Failed to copy accounts: {e}")
+    elif not os.path.exists(target_accounts):
         with open(ACCOUNTS_FILE, 'w') as f:
             f.write("# Format: uid:password\n")
         app.logger.info(f"Created empty {ACCOUNTS_FILE}")
