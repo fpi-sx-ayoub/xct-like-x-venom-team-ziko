@@ -43,7 +43,7 @@ scheduler_started = False
 
 # ================= REMOTE CONFIG =================
 REMOTE_CONFIG_URL = "https://redzedupdater.vercel.app/"
-FALLBACK_TOKEN_API = "https://jubayer-jwt-token-drab.vercel.app/token"
+FALLBACK_TOKEN_API = "https://mafuuu-token-converter.onrender.com/access-jwt"
 remote_config = None
 remote_config_last_fetch = 0
 REMOTE_CONFIG_TTL = 3600
