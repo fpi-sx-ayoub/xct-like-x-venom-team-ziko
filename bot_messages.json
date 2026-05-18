@@ -1,0 +1,5 @@
+{
+  "start_help": "ＨＥＬＬＯ ＩＮ ＴＨＥ ˣᶜᵀㅤ 𝒙    𝑻𝒆𝒂𝑴ㅤ 𝑽𝑷𝑺 ＬＩＫＥ ＢＯＴ\n\nＨＯＷ ＴＯ ＵＳＥ？\n\n/Like uid \n\nExample: /Like 123456789\n\nＤＥＶ ＢＹ : @xCTx_AyOuB / @WC_2C",
+  "like_template": "❤️ LIKE INFORMATION\n\n👤 Player: {PlayerNickname}\n\n🆔 UID: {UID}\n\n📊 Likes Before: {LikesBefore}\n\n📈 Likes After: {LikesAfter}\n\n➕ Likes Added: {LikesGivenByAPI}\n\n✅ Successful Requests:\n\n {SuccessfulRequests}\n\n🎯 Status: {status}\n\nDeV @xCTx_AyOuB / @WC_2C",
+  "stopped": "{\n  \"contact\": \"@xCTx_AyOuB\",\n  \"message\": \"🚫 البوت مُعَطَّل حَالِيًّا مِن قِبَلِ المَالِك\",\n  \"note\": \"يُرْجَى التَّوَاصُل مَعَ المَالِك لِمَعْرِفَة مَوْعِد إعَادَة التَّشْغِيل\",\n  \"owner\": \"ˣᶜᵀ ㅤ𝒙ㅤ 𝑻𝒆𝒂𝑴\",\n  \"owner_tag\": \"@xCTx_AyOuB\",\n  \"running\": false,\n  \"status\": \"مُعَطَّل\",\n  \"team\": \"ˣᶜᵀ ㅤ𝒙ㅤ 𝑻𝒆𝒂𝑴\"\n}"
+}
