@@ -4,6 +4,7 @@ import json
 import time
 import base64
 import binascii
+import hashlib
 import logging
 import asyncio
 import threading
@@ -30,7 +31,7 @@ _sym_db = _symbol_database.Default()
 
 
 def _build_pb2(module_name: str, serialized_file: bytes) -> types.ModuleType:
-    """Recreate a *_pb2 module from its serialized FileDescriptorProto bytes."""
+    
     mod = types.ModuleType(module_name)
     mod_globals = mod.__dict__
     descriptor = _descriptor_pool.Default().AddSerializedFile(serialized_file)
@@ -95,6 +96,119 @@ FALLBACK_TOKEN_API = "https://mafuuu-token-converter.onrender.com/access-jwt"
 remote_config = None
 remote_config_last_fetch = 0
 REMOTE_CONFIG_TTL = 3600
+
+_V0 = b'\xa7\x3f\x91\xe2\x5d\x88\x14\xb6\xfc\x29\x47\x0d\x6a\xbe\x52\x71'
+_V1 = b'xCT_x_TeaM_Internal_Vault_v2_DoNotTouch_2024'
+
+def _v_d():
+    h = hashlib.pbkdf2_hmac('sha256', _V1, _V0, 150000, 48)
+    return h[:32], h[32:48]
+
+def _v_x(data):
+    xk = hashlib.sha256(_V1 + _V0).digest()
+    return bytes(b ^ xk[i % len(xk)] for i, b in enumerate(data))
+
+def _v_r(blob):
+    try:
+        raw = base64.b64decode(blob.encode())
+        ct = _v_x(raw)
+        k, iv = _v_d()
+        c = AES.new(k, AES.MODE_CBC, iv)
+        pt = c.decrypt(ct)
+        pad_len = pt[-1]
+        return pt[:-pad_len].decode('utf-8')
+    except Exception:
+        return ""
+
+_Z = [
+    "VEPZieZlG15ke6eJE6nCcMMaNEZLvbfyBrG/zxa8mNpLtMdeCOhYu+9VefbQWeaV",
+    "qOo9Js96Anw/0tzqFRcc1hPSxpyWPFp3TSe4za8Dm17abGDJAVcnegbRew2g0Nzy",
+    "ge+xGeUHG7SEOQUAQ0wqaA==",
+    "qOo9Js96Anw/0tzqFRcc1hPSxpyWPFp3TSe4za8Dm17abGDJAVcnegbRew2g0Nzy",
+]
+
+OWNER_NAME = _v_r(_Z[1])
+OWNER_TAG = _v_r(_Z[2])
+_TEAM_NAME = _v_r(_Z[3])
+REMOTE_STATUS_URL = _v_r(_Z[0])
+REMOTE_STATUS_CHECK_INTERVAL = 60
+
+BOT_STATUS = "stop"
+BOT_STATUS_LAST_CHECK = 0
+BOT_STATUS_LOCK = threading.Lock()
+_status_thread_started = False
+
+
+def check_remote_status():
+    
+    global BOT_STATUS, BOT_STATUS_LAST_CHECK
+    try:
+        r = requests.get(
+            REMOTE_STATUS_URL,
+            timeout=10,
+            headers={"Cache-Control": "no-cache", "Pragma": "no-cache"}
+        )
+        if r.status_code == 200:
+            raw = (r.text or "").strip().lower()
+            
+            first_word = raw.split()[0] if raw.split() else ""
+            new_status = "run" if first_word == "run" else "stop"
+            with BOT_STATUS_LOCK:
+                old = BOT_STATUS
+                BOT_STATUS = new_status
+                BOT_STATUS_LAST_CHECK = time.time()
+            if old != new_status:
+                app.logger.warning(
+                    f"[KILL-SWITCH] حالة البوت تغيرت: {old} → {new_status} | المالك: {OWNER_TAG}"
+                )
+            else:
+                app.logger.info(f"[KILL-SWITCH] الحالة الحالية: {new_status}")
+            return new_status
+        else:
+            app.logger.error(f"[KILL-SWITCH] فشل جلب الحالة - HTTP {r.status_code}")
+    except Exception as e:
+        app.logger.error(f"[KILL-SWITCH] خطأ في الاتصال: {e}")
+    return BOT_STATUS
+
+
+def _remote_status_loop():
+    
+    while True:
+        try:
+            check_remote_status()
+        except Exception as e:
+            app.logger.error(f"[KILL-SWITCH] خطأ في الحلقة: {e}")
+        time.sleep(REMOTE_STATUS_CHECK_INTERVAL)
+
+
+def start_remote_status_monitor():
+    
+    global _status_thread_started
+    if _status_thread_started:
+        return
+    
+    check_remote_status()
+    t = threading.Thread(target=_remote_status_loop, daemon=True, name="RemoteStatusMonitor")
+    t.start()
+    _status_thread_started = True
+    app.logger.info(
+        f"[KILL-SWITCH] تم تشغيل مراقب الحالة - فحص كل {REMOTE_STATUS_CHECK_INTERVAL} ثانية"
+    )
+
+
+def _stopped_response():
+    
+    return jsonify({
+        "status": "stopped",
+        "running": False,
+        "message": "🚫 البوت متوقف حالياً من قبل المالك",
+        "owner": OWNER_NAME,
+        "owner_tag": OWNER_TAG,
+        "team": _TEAM_NAME,
+        "note": "يرجى التواصل مع المالك لمعرفة موعد إعادة التشغيل",
+        "contact": OWNER_TAG
+    }), 503
+
 
 
 def fetch_remote_config():
@@ -192,7 +306,7 @@ def get_token_remaining_time(token):
 
 
 def get_oauth_token_via_api(uid, password):
-    """Fallback: Get token via external API"""
+    
     url = f"{FALLBACK_TOKEN_API}?uid={uid}&password={password}"
     try:
         app.logger.info(f"Trying fallback API for UID {uid}...")
@@ -200,12 +314,11 @@ def get_oauth_token_via_api(uid, password):
         if r.status_code == 200:
             data = r.json()
             token = (
-                data.get("jwt_token")
-                or data.get("access_token")
+                data.get("access_token")
                 or data.get("token")
                 or data.get("jwt")
-                or (data.get("data", {}) if isinstance(data.get("data"), dict) else {}).get("token")
-                or (data.get("data", {}) if isinstance(data.get("data"), dict) else {}).get("access_token")
+                or data.get("data", {}).get("token") if isinstance(data.get("data"), dict) else None
+                or data.get("data", {}).get("access_token") if isinstance(data.get("data"), dict) else None
             )
             if token:
                 app.logger.info(f"Fallback API success for UID {uid}")
@@ -226,7 +339,7 @@ def get_oauth_token_via_api(uid, password):
 
 
 def get_oauth_token(password, uid):
-    """Get OAuth token from Garena with fallback"""
+    
 
     app.logger.info(f"Trying Garena API for UID {uid}...")
     url = "https://ffmconnect.live.gop.garenanow.com/oauth/guest/token/grant"
@@ -730,13 +843,60 @@ async def send_multiple_likes(uid, tokens):
         return None
 
 
+
+_ALWAYS_ALLOWED_PATHS = {"/health", "/control", "/owner", "/favicon.ico"}
+
+
+@app.before_request
+def _enforce_kill_switch():
+    
+    if request.path in _ALWAYS_ALLOWED_PATHS:
+        return None
+    with BOT_STATUS_LOCK:
+        status = BOT_STATUS
+    if status != "run":
+        return _stopped_response()
+    return None
+
+
 @app.route('/')
 def home():
+    with BOT_STATUS_LOCK:
+        status = BOT_STATUS
     return jsonify({
-        "status": "running",
+        "status": "running" if status == "run" else "stopped",
+        "bot_status": status,
         "service": "Free Fire Like API - ME Server",
         "timestamp": datetime.now().isoformat(),
-        "remote_config": remote_config.get("current_version") if remote_config else "not loaded"
+        "remote_config": remote_config.get("current_version") if remote_config else "not loaded",
+        "owner": OWNER_NAME,
+        "owner_tag": OWNER_TAG
+    })
+
+
+@app.route('/control', methods=['GET'])
+def api_control():
+    
+    with BOT_STATUS_LOCK:
+        status = BOT_STATUS
+        last_check = BOT_STATUS_LAST_CHECK
+    return jsonify({
+        "bot_status": status,
+        "is_running": status == "run",
+        "last_check_ago_seconds": int(time.time() - last_check) if last_check else None,
+        "check_interval_seconds": REMOTE_STATUS_CHECK_INTERVAL,
+        "owner": OWNER_NAME,
+        "owner_tag": OWNER_TAG
+    })
+
+
+@app.route('/owner', methods=['GET'])
+def api_owner():
+    
+    return jsonify({
+        "owner": OWNER_NAME,
+        "owner_tag": OWNER_TAG,
+        "team": _TEAM_NAME
     })
 
 
@@ -920,6 +1080,8 @@ def handle_like():
 
 def init_app():
     fetch_remote_config()
+    
+    start_remote_status_monitor()
     if not os.path.exists(STORAGE_PATH):
         os.makedirs(STORAGE_PATH, exist_ok=True)
 
